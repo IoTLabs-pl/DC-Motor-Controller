@@ -1,0 +1,27 @@
+esphome:
+  name: cover-controller
+  friendly_name: Cover Controller
+  name_add_mac_suffix: True
+
+packages:
+  dc_motor_controller: github://IoTLabs-pl/DC-Motor-Controller/packages/controller.yaml
+
+logger:
+  level: DEBUG
+  baud_rate: 0
+  logs:
+    cover: INFO
+    sensor: INFO
+    number: INFO
+    PID: INFO
+
+api:
+
+web_server:
+  version: 3
+  include_internal: False
+
+wifi:
+  ap:
+
+captive_portal:
