@@ -1,0 +1,16 @@
+globals:
+  - id: motor${motor_id}_${pos_id}_position
+    type: int
+    restore_value: True
+
+button:
+  - platform: template
+    name: Set Output ${motor_id} ${pos_name} Position
+    id: motor${motor_id}_latch_${pos_id}_position
+    entity_category: CONFIG
+    on_press:
+      then:
+        - globals.set:
+            id: motor${motor_id}_${pos_id}_position
+            value: !lambda return id(motor${motor_id}_position).raw_state;
+        - script.execute: motor${motor_id}_position_update

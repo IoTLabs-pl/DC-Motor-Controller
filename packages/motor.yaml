@@ -1,0 +1,232 @@
+output:
+  - platform: ledc
+    id: motor${motor_id}_output_internal_
+    pin: ${enable_pin}
+    frequency: 2000
+
+  - platform: gpio
+    id: motor${motor_id}_direction
+    pin:
+      number: ${phase_pin}
+
+number:
+  - platform: template
+    id: motor${motor_id}_output
+    name: Output ${motor_id} Control Signal
+    optimistic: true
+    step: 0.01
+    min_value: -1
+    max_value: 1
+    initial_value: 0
+    update_interval: never
+    disabled_by_default: true
+    entity_category: CONFIG
+    set_action:
+      then:
+        - output.set_level:
+            id: motor${motor_id}_output_internal_
+            level: !lambda return fabs(x);
+        - if:
+            condition:
+              xor:
+                - switch.is_on: motor${motor_id}_reverse
+                - lambda: return x < 0;
+            then:
+              - output.turn_on: motor${motor_id}_direction
+            else:
+              - output.turn_off: motor${motor_id}_direction
+
+packages:
+  endstop_top: !include
+    file: endstop.yaml
+    vars:
+      motor_id: ${motor_id}
+      pos_id: top
+      pos_name: Top
+
+  endstop_down: !include
+    file: endstop.yaml
+    vars:
+      motor_id: ${motor_id}
+      pos_id: down
+      pos_name: Down
+
+switch:
+  - platform: template
+    name: Reverse Output ${motor_id}
+    id: motor${motor_id}_reverse
+    entity_category: CONFIG
+    optimistic: True
+    restore_mode: RESTORE_DEFAULT_OFF
+
+sensor:
+  - platform: esp32_rotary_encoder
+    id: motor${motor_id}_position
+    pin_a: ${encoder_a_pin}
+    pin_b: ${encoder_b_pin}
+    restore_mode: RESTORE_DEFAULT_ZERO
+    publish_initial_value: True
+    entity_category: DIAGNOSTIC
+    accuracy_decimals: 2
+    unit_of_measurement: ""
+    filters:
+      - lambda: return (x - id(motor${motor_id}_down_position)) / (id(motor${motor_id}_top_position) - id(motor${motor_id}_down_position));
+
+  - platform: adc
+    id: motor${motor_id}_current
+    name: Output ${motor_id} Current
+    entity_category: DIAGNOSTIC
+    pin: ${current_pin}
+    update_interval: 50ms
+    device_class: current
+    unit_of_measurement: mA
+    filters:
+      - multiply: 136 # V_prop / 5 / 0.68Ohm * 1000mA/A
+      - sliding_window_moving_average:
+          window_size: 10
+          send_every: 10
+          send_first_at: 10
+      - timeout:
+          value: 0
+          timeout: 600ms
+
+binary_sensor:
+  - platform: gpio
+    name: Output ${motor_id} External Button
+    disabled_by_default: true
+    pin:
+      number: ${button_pin}
+      inverted: True
+      mode:
+        input: True
+        pullup: True
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: return id(motor${motor_id}_cover).current_operation == COVER_OPERATION_IDLE;
+            then:
+              - cover.control:
+                  id: motor${motor_id}_cover
+                  position: !lambda return id(motor${motor_id}_cover).position <= 0.5f;
+    on_multi_click:
+      - timing:
+          - ON for at least 1.5s
+          - OFF for at least 0s
+        then:
+          - cover.stop: motor${motor_id}_cover
+      - timing:
+          - ON for at most 0.5s
+          - OFF for at least 1s
+          - ON for at most 0.5s
+        then:
+          - cover.stop: motor${motor_id}_cover
+
+  - platform: gpio
+    id: motor${motor_id}_fault
+    name: Output ${motor_id} Fault
+    device_class: problem
+    entity_category: DIAGNOSTIC
+    pin:
+      number: ${nfault_pin}
+      inverted: True
+      mode:
+        input: True
+        pullup: True
+    filters:
+      - lambda: if(id(motor_power_request).state) return x; return {};
+    on_press:
+      then:
+        - lambda: |-
+            id(motor${motor_id}_fault).status_set_error("Motor ${motor_id} fault");
+    on_release:
+      then:
+        - lambda: id(motor${motor_id}_fault).status_clear_error();
+
+  - id: !extend motor_power_request
+    on_press:
+      then:
+        - component.resume: motor${motor_id}_current
+        - sensor.esp32_rotary_encoder.enable: motor${motor_id}_position
+    on_release:
+      then:
+        - sensor.esp32_rotary_encoder.disable: motor${motor_id}_position
+        - component.suspend: motor${motor_id}_current
+
+script:
+  - id: motor${motor_id}_position_update
+    then:
+      - lambda: id(motor${motor_id}_position).publish_state(id(motor${motor_id}_position).raw_state);
+
+  - id: motor${motor_id}_go_to
+    mode: restart
+    parameters:
+      position: float
+    then:
+      - logger.log:
+          level: INFO
+          format: "Moving motor ${motor_id} to %f"
+          args:
+            - position
+      - wait_until:
+          binary_sensor.is_on: motor_power
+      - dc_servo.go_to:
+          id: motor${motor_id}_servo
+          position: !lambda return position;
+      - logger.log:
+          level: INFO
+          format: "Run action done for ${motor_id}"
+
+dc_servo:
+  - id: motor${motor_id}_servo
+    log_tag: ${motor_id}
+    output: motor${motor_id}_output
+    input: motor${motor_id}_position
+    update_interval: 25ms
+    sample_time_multiplier: 4
+    move_time: 35s
+    acceleration_time: 2s
+    acceleration_rising_time: 500ms
+    speed_controller:
+      kp: 10
+      ki: 7
+      kd: 0
+    position_controller:
+      kp: 10
+      ki: 10
+      kd: 0
+    on_direction_change:
+      then:
+        cover.template.publish:
+          id: motor${motor_id}_cover
+          current_operation: !lambda |-
+            switch (direction) {
+              case DC_SERVO_DIRECTION_BACKWARD: return COVER_OPERATION_CLOSING;
+              case DC_SERVO_DIRECTION_FORWARD: return COVER_OPERATION_OPENING;
+              case DC_SERVO_DIRECTION_STOP: return COVER_OPERATION_IDLE;
+              default: return {};
+            }
+
+cover:
+  - platform: template
+    name: Output ${motor_id}
+    id: motor${motor_id}_cover
+    has_position: true
+    restore_mode: NO_RESTORE
+    lambda: |-
+      static auto filter = ThrottleFilter(1000);
+      return filter.new_value(id(motor${motor_id}_position).state);
+    position_action:
+      - script.execute:
+          id: motor${motor_id}_go_to
+          position: !lambda return pos;
+    open_action:
+      - script.execute:
+          id: motor${motor_id}_go_to
+          position: COVER_OPEN
+    close_action:
+      - script.execute:
+          id: motor${motor_id}_go_to
+          position: COVER_CLOSED
+    stop_action:
+      - dc_servo.stop: motor${motor_id}_servo

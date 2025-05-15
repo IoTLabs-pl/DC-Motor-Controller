@@ -1,0 +1,106 @@
+esphome:
+  platformio_options:
+    board_build.flash_mode: dio
+  project:
+    name: IoTLabs.DC Motor Controller
+    version: 1.0.0
+  on_boot:
+    then:
+      - output.turn_on: inputs_power
+      - binary_sensor.template.publish:
+          id: motor_power_request
+          state: true
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+  flash_size: 4MB
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components:
+      - dc_servo
+      - esp32_rotary_encoder
+
+substitutions:
+  <<: !include esp32s3.base.yaml
+
+status_led:
+  pin: $STATUSLED_PIN
+
+output:
+  - platform: gpio
+    pin: $ENCODERSPOWERENABLE_PIN
+    id: encoders_power
+    inverted: True
+
+  - platform: gpio
+    pin: $INPUTSPOWERENABLE_PIN
+    id: inputs_power
+    inverted: True
+
+  - platform: gpio
+    pin: $MOTORSPOWERENABLE_PIN
+    id: motors_power
+
+switch:
+  - platform: template
+    name: Calibration
+    id: calibration
+    entity_category: CONFIG
+    optimistic: True
+    restore_mode: ALWAYS_OFF
+
+binary_sensor:
+  - platform: template
+    id: motor_power_request
+    lambda: return id(motor1_go_to).is_running() || id(motor2_go_to).is_running() || id(calibration).state;
+    on_press:
+      then:
+        - output.turn_on: encoders_power
+        - output.turn_on: motors_power
+        - delay: 50ms
+        - lambda: |-
+            App.scheduler.cancel_interval(preferences_intervalsyncer_id, ""); // never save
+    on_release:
+      then:
+        - output.turn_off: motors_power
+        - output.turn_off: encoders_power
+        - lambda: |-
+            preferences_intervalsyncer_id->setup(); // revert to default
+    filters:
+      - delayed_off: 2s
+
+  - platform: copy
+    source_id: motor_power_request
+    id: motor_power
+    filters:
+      - delayed_on: 100ms
+
+packages:
+  motor_1: !include
+    file: definitions/motor.yaml
+    vars:
+      motor_id: 1
+      button_pin: $ENDSTOP1_PIN
+      nfault_pin: $MOTOR1NFAULT_PIN
+      encoder_a_pin: $MOTOR1ENCODERA_PIN
+      encoder_b_pin: $MOTOR1ENCODERB_PIN
+      current_pin: $MOTOR1CURRENT_PIN
+      enable_pin: $MOTOR1ENABLE_PIN
+      phase_pin: $MOTOR1PHASE_PIN
+
+  motor_2: !include
+    file: definitions/motor.yaml
+    vars:
+      motor_id: 2
+      button_pin: $ENDSTOP2_PIN
+      nfault_pin: $MOTOR2NFAULT_PIN
+      encoder_a_pin: $MOTOR2ENCODERA_PIN
+      encoder_b_pin: $MOTOR2ENCODERB_PIN
+      current_pin: $MOTOR2CURRENT_PIN
+      enable_pin: $MOTOR2ENABLE_PIN
+      phase_pin: $MOTOR2PHASE_PIN
