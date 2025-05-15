@@ -18,7 +18,7 @@ esp32:
   flash_size: 4MB
 
 external_components:
-  - source: github://IoTLabs-pl/DC-Motor-Controller
+  - source: github://IoTLabs-pl/Smart-Motor-Driver
 
 substitutions:
   <<: !include esp32s3.base.yaml

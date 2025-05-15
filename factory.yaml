@@ -2,5 +2,5 @@ packages:
   software: !include example.yaml
 
 dashboard_import:
-  package_import_url: github://IoTLabs-pl/DC-Motor-Controller/example.yaml@master
+  package_import_url: github://IoTLabs-pl/Smart-Motor-Driver/example.yaml@master
   import_full_config: True

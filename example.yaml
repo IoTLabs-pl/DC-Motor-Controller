@@ -4,7 +4,7 @@ esphome:
   name_add_mac_suffix: True
 
 packages:
-  dc_motor_controller: github://IoTLabs-pl/DC-Motor-Controller/packages/controller.yaml
+  smart_motor_driver: github://IoTLabs-pl/Smart-Motor-Driver/packages/base_software.yaml
 
 logger:
   level: DEBUG
