@@ -18,12 +18,7 @@ esp32:
   flash_size: 4MB
 
 external_components:
-  - source:
-      type: local
-      path: ../components
-    components:
-      - dc_servo
-      - esp32_rotary_encoder
+  - source: github://IoTLabs-pl/DC-Motor-Controller
 
 substitutions:
   <<: !include esp32s3.base.yaml
