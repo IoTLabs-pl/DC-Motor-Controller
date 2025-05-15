@@ -82,7 +82,7 @@ binary_sensor:
 
 packages:
   motor_1: !include
-    file: definitions/motor.yaml
+    file: motor.yaml
     vars:
       motor_id: 1
       button_pin: $ENDSTOP1_PIN
@@ -94,7 +94,7 @@ packages:
       phase_pin: $MOTOR1PHASE_PIN
 
   motor_2: !include
-    file: definitions/motor.yaml
+    file: motor.yaml
     vars:
       motor_id: 2
       button_pin: $ENDSTOP2_PIN
