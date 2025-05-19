@@ -1,8 +1,11 @@
+# Software endstops for motor
+# We set motor position in persistent memory
 globals:
   - id: motor${motor_id}_${pos_id}_position
     type: int
     restore_value: True
 
+# It is done when template button is pressed
 button:
   - platform: template
     name: Set Output ${motor_id} ${pos_name} Position

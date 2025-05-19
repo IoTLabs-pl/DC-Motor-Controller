@@ -1,15 +1,19 @@
 output:
+  # PWM output for the motor power
   - platform: ledc
     id: motor${motor_id}_output_internal_
     pin: ${enable_pin}
     frequency: 2000
 
+  # Binary output for the direction control
   - platform: gpio
     id: motor${motor_id}_direction
     pin:
       number: ${phase_pin}
 
 number:
+  # Servo component outputs value from -1 to 1
+  # This components converts it to 0 to 1 range and direction bool
   - platform: template
     id: motor${motor_id}_output
     name: Output ${motor_id} Control Signal
@@ -52,6 +56,8 @@ packages:
       pos_name: Down
 
 switch:
+  # Template switch for reversing motor direction
+  # relative to the DC Servo motor value
   - platform: template
     name: Reverse Output ${motor_id}
     id: motor${motor_id}_reverse
@@ -60,6 +66,7 @@ switch:
     restore_mode: RESTORE_DEFAULT_OFF
 
 sensor:
+  # Rotary encoder for position feedback
   - platform: esp32_rotary_encoder
     id: motor${motor_id}_position
     pin_a: ${encoder_a_pin}
@@ -72,6 +79,7 @@ sensor:
     filters:
       - lambda: return (x - id(motor${motor_id}_down_position)) / (id(motor${motor_id}_top_position) - id(motor${motor_id}_down_position));
 
+  # Current sensor for motor
   - platform: adc
     id: motor${motor_id}_current
     name: Output ${motor_id} Current
@@ -91,6 +99,10 @@ sensor:
           timeout: 600ms
 
 binary_sensor:
+  # External buttons (connected to ENDSTOP pins)
+  # for manual cover control
+  # Press will start movement if motor is idle, else stops
+  # Long press release stops the motor
   - platform: gpio
     name: Output ${motor_id} External Button
     disabled_by_default: true
@@ -122,6 +134,7 @@ binary_sensor:
         then:
           - cover.stop: motor${motor_id}_cover
 
+  # Reading fault status from the DRV8801
   - platform: gpio
     id: motor${motor_id}_fault
     name: Output ${motor_id} Fault
@@ -143,6 +156,8 @@ binary_sensor:
       then:
         - lambda: id(motor${motor_id}_fault).status_clear_error();
 
+  # Enabling current and position sensors
+  # when the motor is moving
   - id: !extend motor_power_request
     on_press:
       then:
@@ -154,10 +169,12 @@ binary_sensor:
         - component.suspend: motor${motor_id}_current
 
 script:
+  # Script for force-updating the position sensor
   - id: motor${motor_id}_position_update
     then:
       - lambda: id(motor${motor_id}_position).publish_state(id(motor${motor_id}_position).raw_state);
 
+  # Script for moving the motor to a specific position
   - id: motor${motor_id}_go_to
     mode: restart
     parameters:
@@ -178,15 +195,22 @@ script:
           format: "Run action done for ${motor_id}"
 
 dc_servo:
+  # DC Servo motor driver
   - id: motor${motor_id}_servo
     log_tag: ${motor_id}
     output: motor${motor_id}_output
     input: motor${motor_id}_position
     update_interval: 25ms
     sample_time_multiplier: 4
-    move_time: 35s
+    # Motion parameters
+    move_time: 35s # From 0 to 1 (full range)
     acceleration_time: 2s
     acceleration_rising_time: 500ms
+    # PID Controllers
+    # Start with 1,0,0 and adjust kp to get the desired speed/position
+    # If oscillation occurs before reaching the target, decrease kp and 
+    # increase ki
+    # kd may be used to smooth the movement
     speed_controller:
       kp: 10
       ki: 7
@@ -208,6 +232,7 @@ dc_servo:
             }
 
 cover:
+  # Cover component
   - platform: template
     name: Output ${motor_id}
     id: motor${motor_id}_cover

@@ -27,21 +27,25 @@ status_led:
   pin: $STATUSLED_PIN
 
 output:
+  # Power control for the encoders
   - platform: gpio
     pin: $ENCODERSPOWERENABLE_PIN
     id: encoders_power
     inverted: True
 
+  # Power control for the inputs circuitry
   - platform: gpio
     pin: $INPUTSPOWERENABLE_PIN
     id: inputs_power
     inverted: True
 
+  # Power control for the DRV8801 drivers
   - platform: gpio
     pin: $MOTORSPOWERENABLE_PIN
     id: motors_power
 
 switch:
+  # Switch for manual control of the encoders power
   - platform: template
     name: Calibration
     id: calibration
@@ -50,6 +54,8 @@ switch:
     restore_mode: ALWAYS_OFF
 
 binary_sensor:
+  # Template sensors for automatic disable of the encoders power
+  # in case of no movement request
   - platform: template
     id: motor_power_request
     lambda: return id(motor1_go_to).is_running() || id(motor2_go_to).is_running() || id(calibration).state;
